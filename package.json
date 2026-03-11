@@ -1,0 +1,13 @@
+{
+  "name": "automatizacion-leads-calientes",
+  "version": "1.0.0",
+  "description": "Sistema automatizado de deteccion de oportunidades de venta via MailerLite",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "stripe": "^14.0.0"
+  }
+}
