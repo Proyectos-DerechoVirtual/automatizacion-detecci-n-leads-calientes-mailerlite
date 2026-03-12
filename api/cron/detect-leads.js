@@ -72,27 +72,31 @@ export default async function handler(req, res) {
       lead.nivel_urgencia = lead.clicks_totales >= 10 ? 'hot' : 'warm';
     }
 
-    // PASO 4: Procesar leads (limitado para respetar timeout)
-    const leadsToProcess = hotLeads.slice(0, MAX_LEADS_PER_RUN);
+    // PASO 4: Procesar leads - recorrer TODOS los hot leads pero solo procesar MAX_LEADS nuevos
     const stats = { processed: 0, skipped: 0, whatsapp_sent: 0, email_sent: 0, email_failed: 0, errors: 0 };
 
-    for (const lead of leadsToProcess) {
+    for (const lead of hotLeads) {
+      // Parar si ya procesamos suficientes leads nuevos
+      if (stats.processed >= MAX_LEADS_PER_RUN) {
+        addLog(`Limite de ${MAX_LEADS_PER_RUN} leads nuevos alcanzado`);
+        break;
+      }
+
       // Verificar timeout (dejar 10s de margen)
       if (Date.now() - startTime > 50000) {
-        addLog(`TIMEOUT PREVENTIVO: quedan ${hotLeads.length - stats.processed - stats.skipped} leads sin procesar`);
+        addLog(`TIMEOUT PREVENTIVO: ${stats.processed} procesados, quedan leads sin procesar`);
         break;
       }
 
       try {
-        addLog(`\nProcesando: ${lead.email} (${lead.clicks_totales} clicks - ${lead.nivel_urgencia})`);
-
-        // Verificar cooldown
+        // Verificar cooldown ANTES de loguear (para no llenar el log de skips)
         const recentlyContacted = await wasRecentlyContacted(lead.email, config.cooldownDays);
         if (recentlyContacted) {
-          addLog(`  SKIP: contactado en ultimos ${config.cooldownDays} dias`);
           stats.skipped++;
           continue;
         }
+
+        addLog(`\nProcesando: ${lead.email} (${lead.clicks_totales} clicks - ${lead.nivel_urgencia})`);
 
         // Enriquecer en paralelo (Teachable + Stripe + Calendly)
         const [teachableData, stripeData, calendlyData] = await Promise.all([
