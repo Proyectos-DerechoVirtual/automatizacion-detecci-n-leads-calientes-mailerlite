@@ -110,11 +110,11 @@ export default async function handler(req, res) {
         const stripePhone = stripeData.telefono;
         const calendlyPhone = calendlyData.telefono;
 
-        addLog(`  Teachable: ${teachableData.tiene_cursos ? 'SI' : 'No'} | Stripe: ${stripeData.tiene_pagos ? `SI ($${stripeData.total_gastado})` : 'No'} | Calendly: ${calendlyData.tiene_evento ? 'SI' : 'No'}`);
-
         // Determinar telefono (prioridad: Calendly > Stripe > MailerLite)
-        const telefono = calendlyPhone || stripePhone || lead.telefono_mailerlite;
+        const telefono = calendlyPhone || stripePhone || lead.telefono_mailerlite || null;
         lead.telefono = telefono;
+
+        addLog(`  Teachable: ${teachableData.tiene_cursos ? 'SI' : 'No'} | Stripe: ${stripeData.tiene_pagos ? `SI ($${stripeData.total_gastado})` : 'No'} | Calendly: ${calendlyData.tiene_evento ? 'SI' : 'No'} | Tel: ${telefono || 'ninguno'} (${calendlyPhone ? 'Calendly' : stripePhone ? 'Stripe' : lead.telefono_mailerlite ? 'MailerLite' : '-'})`);
 
         // PASO 5: Contactar
         if (telefono) {
