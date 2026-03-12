@@ -5,6 +5,7 @@ import { enrichWithTeachable } from '../../lib/teachable.js';
 import { enrichWithStripe } from '../../lib/stripe-client.js';
 import { enrichWithCalendly } from '../../lib/calendly.js';
 import { sendWhatsApp, buildWhatsAppMessage } from '../../lib/ultramsg.js';
+import { sendPersonalizedEmail } from '../../lib/email.js';
 
 // Limite de leads a procesar por ejecucion (para no exceder timeout de 60s)
 const MAX_LEADS_PER_RUN = 10;
@@ -67,7 +68,7 @@ export default async function handler(req, res) {
 
     // PASO 4: Procesar leads (limitado para respetar timeout)
     const leadsToProcess = hotLeads.slice(0, MAX_LEADS_PER_RUN);
-    const stats = { processed: 0, skipped: 0, whatsapp_sent: 0, email_pending: 0, errors: 0 };
+    const stats = { processed: 0, skipped: 0, whatsapp_sent: 0, email_sent: 0, email_failed: 0, errors: 0 };
 
     for (const lead of leadsToProcess) {
       // Verificar timeout (dejar 10s de margen)
@@ -125,11 +126,19 @@ export default async function handler(req, res) {
             addLog(`  WHATSAPP FALLO`);
           }
         } else {
-          lead.canal_contacto = 'email';
-          lead.estado = 'contactado';
-          lead.fecha_ultimo_contacto = new Date().toISOString();
-          stats.email_pending++;
-          addLog(`  SIN TELEFONO -> marcado para email`);
+          // Sin telefono -> enviar email personalizado via SMTP
+          const emailResult = await sendPersonalizedEmail(lead);
+          if (emailResult.sent) {
+            lead.canal_contacto = 'email';
+            lead.estado = 'contactado';
+            lead.fecha_ultimo_contacto = new Date().toISOString();
+            stats.email_sent++;
+            addLog(`  EMAIL ENVIADO a ${lead.email}`);
+          } else {
+            lead.canal_contacto = 'pendiente';
+            stats.email_failed++;
+            addLog(`  EMAIL FALLO: ${emailResult.error}`);
+          }
         }
 
         // Guardar en Supabase
@@ -146,7 +155,7 @@ export default async function handler(req, res) {
     const duration = ((Date.now() - startTime) / 1000).toFixed(1);
     addLog(`\n=== RESUMEN ===`);
     addLog(`Duracion: ${duration}s | Campanas: ${campaigns.length} | Hot leads: ${hotLeads.length}`);
-    addLog(`Procesados: ${stats.processed} | Skipped: ${stats.skipped} | WhatsApp: ${stats.whatsapp_sent} | Email: ${stats.email_pending} | Errors: ${stats.errors}`);
+    addLog(`Procesados: ${stats.processed} | Skipped: ${stats.skipped} | WhatsApp: ${stats.whatsapp_sent} | Email: ${stats.email_sent} | Email fallidos: ${stats.email_failed} | Errors: ${stats.errors}`);
 
     return res.status(200).json({
       success: true,
