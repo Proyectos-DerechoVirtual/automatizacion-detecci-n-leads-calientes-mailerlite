@@ -34,11 +34,17 @@ export default async function handler(req, res) {
     const campaigns = await getRecentCampaigns(config.lookbackDays);
     addLog(`Encontradas ${campaigns.length} campanas con clicks`);
 
-    // PASO 2: Obtener clickers por campana (en paralelo, batches de 5)
+    // PASO 2: Obtener clickers por campana (en paralelo, batches de 10)
+    // Limitar a top 30 campanas por clicks para respetar timeout
+    const topCampaigns = campaigns
+      .sort((a, b) => b.stats.clicks_count - a.stats.clicks_count)
+      .slice(0, 30);
+    addLog(`Analizando top ${topCampaigns.length} campanas por clicks...`);
+
     const campaignClicksMap = {};
-    const batchSize = 5;
-    for (let i = 0; i < campaigns.length; i += batchSize) {
-      const batch = campaigns.slice(i, i + batchSize);
+    const batchSize = 10;
+    for (let i = 0; i < topCampaigns.length; i += batchSize) {
+      const batch = topCampaigns.slice(i, i + batchSize);
       const results = await Promise.all(
         batch.map(async (campaign) => {
           const clickers = await getCampaignClickers(campaign.id);
@@ -48,9 +54,9 @@ export default async function handler(req, res) {
       for (const { name, clickers } of results) {
         if (clickers.length > 0) {
           campaignClicksMap[name] = clickers;
-          addLog(`  ${name}: ${clickers.length} clickers`);
         }
       }
+      addLog(`  Batch ${Math.floor(i/batchSize)+1}: ${results.reduce((s,r) => s + r.clickers.length, 0)} clickers`);
     }
 
     // PASO 3: Agregar clicks y filtrar por umbral
